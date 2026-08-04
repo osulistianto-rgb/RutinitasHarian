@@ -1,0 +1,5 @@
+RutinitasHarian/
+├── .github/
+│   └── workflows/
+│       └── build-apk.yml
+└── RutinitasHarian-Android.zip
