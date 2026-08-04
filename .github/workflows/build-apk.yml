@@ -1,5 +1,61 @@
-RutinitasHarian/
-├── .github/
-│   └── workflows/
-│       └── build-apk.yml
-└── RutinitasHarian-Android.zip
+name: Build APK Rutinitas Harian
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ambil file repository
+        uses: actions/checkout@v4
+
+      - name: Siapkan Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Ekstrak proyek Android
+        run: |
+          unzip -o RutinitasHarian-Android.zip -d android-project
+          echo "Isi folder hasil ekstrak:"
+          find android-project -maxdepth 3 -type f | head -50
+
+      - name: Cari dan jalankan Gradle
+        run: |
+          GRADLEW=$(find android-project -name gradlew -type f | head -1)
+
+          if [ -z "$GRADLEW" ]; then
+            echo "File gradlew tidak ditemukan."
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$GRADLEW")
+          cd "$PROJECT_DIR"
+
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Kumpulkan APK
+        run: |
+          mkdir -p hasil-apk
+
+          APK=$(find android-project -name "*.apk" -type f | head -1)
+
+          if [ -z "$APK" ]; then
+            echo "APK tidak ditemukan."
+            exit 1
+          fi
+
+          cp "$APK" hasil-apk/RutinitasHarian.apk
+
+      - name: Unggah APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RutinitasHarian-APK
+          path: hasil-apk/RutinitasHarian.apk
