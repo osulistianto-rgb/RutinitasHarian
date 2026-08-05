@@ -1,0 +1,73 @@
+name: Build APK v0.3.4 Plus Laporan Rehab
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "index.html"
+      - "android/**"
+      - ".github/workflows/build-apk-v034.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build APK Terbaru
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ambil repository
+        uses: actions/checkout@v4
+
+      - name: Periksa file aplikasi terbaru
+        run: |
+          test -f index.html
+          test -d android/app/src/main/assets
+          echo "Judul aplikasi:"
+          grep -o "<title>[^<]*</title>" index.html | head -1 || true
+          echo "Ukuran index.html:"
+          ls -lh index.html
+
+      - name: Salin aplikasi terbaru ke proyek Android
+        run: |
+          cp -f index.html android/app/src/main/assets/index.html
+          echo "File Android telah diperbarui:"
+          ls -lh android/app/src/main/assets/index.html
+          cmp --silent index.html android/app/src/main/assets/index.html
+          echo "Sinkronisasi berhasil."
+
+      - name: Siapkan Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Siapkan Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Bersihkan build lama
+        working-directory: android
+        run: gradle clean
+
+      - name: Buat APK
+        working-directory: android
+        run: gradle assembleDebug --stacktrace
+
+      - name: Periksa APK
+        run: |
+          test -f android/app/build/outputs/apk/debug/app-debug.apk
+          ls -lh android/app/build/outputs/apk/debug/app-debug.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk              Rutinitas-Harian-v034-Plus-Laporan-Rehab.apk
+
+      - name: Unggah APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rutinitas-Harian-v034-Plus-Laporan-Rehab-APK
+          path: Rutinitas-Harian-v034-Plus-Laporan-Rehab.apk
+          if-no-files-found: error
+          retention-days: 30
