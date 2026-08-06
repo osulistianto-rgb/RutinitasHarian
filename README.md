@@ -17,7 +17,8 @@ tidak ada yang dikirim ke mana pun.
 | `sw.js` | Pekerja layanan, membuat aplikasi tetap terbuka tanpa jaringan |
 | `ikon-*.png` | Ikon aplikasi 192 px, 512 px, dan maskable |
 | `uji.js` | Pengujian otomatis |
-| `.github/workflows/` | Alur kerja: menguji lalu menerbitkan |
+| `.github/workflows/` | Alur kerja: menguji, menerbitkan, dan membangun APK |
+| `android/` | Pembungkus APK: WebView dengan alamat internal yang sah |
 | `.nojekyll` | Mencegah GitHub Pages mengabaikan berkas tertentu |
 
 ## Modul
@@ -68,10 +69,14 @@ npm install
 npm run uji
 ```
 
-Pengujian memeriksa 110 butir: sintaks tiap modul, pemuatan tanpa galat,
+Pengujian memeriksa 116 butir: sintaks tiap modul, pemuatan tanpa galat,
 kontras mode gelap, kalender, statistik, pencarian, penyimpanan per tanggal,
 serta keutuhan cadangan — termasuk mencoba merusak berkas cadangan satu bita
 untuk memastikan kerusakannya benar-benar terdeteksi.
+
+Termasuk pemeriksaan bahwa skrip tiap modul benar-benar dievaluasi sampai
+habis. Ini penting: deklarasi fungsi terangkat ke atas, sehingga sebuah fungsi
+bisa tampak "ada" padahal skripnya berhenti di tengah jalan.
 
 Alur kerja GitHub menjalankan pengujian yang sama pada setiap perubahan.
 Bila ada yang gagal, penerbitan dibatalkan.
@@ -108,3 +113,57 @@ lampiran, lengkap dengan checksum per berkas.
 
 Simpan salinannya di luar ponsel. Cadangan yang tersimpan di perangkat yang sama
 tidak menolong bila perangkatnya hilang.
+
+---
+
+## Membangun APK
+
+APK dibangun oleh GitHub, bukan di ponsel. Buka tab **Actions → Bangun APK →
+Run workflow**, isi nomor versi, lalu jalankan. Hasilnya muncul di bagian
+**Artifacts** pada halaman yang sama.
+
+Untuk sekaligus membuat rilis, dorong penanda versi:
+
+```bash
+git tag v5.8
+git push origin v5.8
+```
+
+### Menandatangani APK (sekali saja)
+
+Tanpa kunci penanda tangan, APK dibangun sebagai *debug*. APK debug tetap bisa
+dipasang, tetapi **tidak bisa memperbarui** APK yang ditandatangani kunci lain —
+harus dihapus dulu, dan data ikut hilang bila belum dicadangkan.
+
+Buat kunci sekali, lalu simpan sebagai rahasia repositori:
+
+```bash
+keytool -genkeypair -v -keystore kunci.jks -keyalg RSA -keysize 2048 \
+        -validity 10000 -alias rutinitas
+
+base64 -w 0 kunci.jks > kunci.txt
+```
+
+Di **Settings → Secrets and variables → Actions**, tambahkan:
+
+| Nama rahasia | Isi |
+|---|---|
+| `KEYSTORE_BASE64` | seluruh isi `kunci.txt` |
+| `KEYSTORE_PASSWORD` | sandi keystore |
+| `KEY_ALIAS` | `rutinitas` |
+| `KEY_PASSWORD` | sandi kunci |
+
+Simpan `kunci.jks` baik-baik di luar repositori. Kalau hilang, kamu tidak akan
+bisa lagi menerbitkan pembaruan yang menimpa pemasangan lama.
+
+### Mengapa dibungkus sendiri
+
+Pembungkus APK otomatis umumnya memuat halaman dari `file://`. Pada alamat itu
+IndexedDB sering ditolak Android — padahal seluruh foto dan lampiran aplikasi ini
+tersimpan di sana.
+
+Pembungkus di map `android/` melayani berkas lewat `WebViewAssetLoader` pada
+alamat internal yang sah, sehingga IndexedDB, `localStorage`, dan pekerja layanan
+berjalan sebagaimana mestinya. Pembungkus ini juga menangani pemilih berkas
+(kamera, galeri, lampiran), pengunduhan `blob:` dan `data:` untuk ekspor PDF dan
+cadangan `.rtns`, serta tombol kembali yang menutup panel lebih dulu.
