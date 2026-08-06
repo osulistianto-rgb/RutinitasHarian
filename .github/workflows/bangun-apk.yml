@@ -1,139 +1,730 @@
-name: Bangun APK
+name: Bangun APK Rutinitas Plus v5.8
 
-# Dijalankan manual, atau otomatis saat penanda versi didorong (mis. v5.8).
 on:
   workflow_dispatch:
-    inputs:
-      versi:
-        description: 'Nama versi, mis. 5.8'
-        required: true
-        default: '5.8'
   push:
-    tags:
-      - 'v*'
+    branches: [ "main", "master" ]
+    paths:
+      - "index.html"
+      - ".github/workflows/**"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  bangun:
-    name: Bangun APK
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Ambil kode
+      - name: Ambil source code
         uses: actions/checkout@v4
 
-      - name: Siapkan Java
+      - name: Periksa index.html
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s index.html || {
+            echo "ERROR: index.html tidak ditemukan atau kosong di root repository."
+            exit 1
+          }
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+          import re
+
+          teks = Path("index.html").read_text(encoding="utf-8")
+          modul = re.findall(r"(\w+):decode\('([A-Za-z0-9+/=]{200,})'\)", teks)
+
+          if len(modul) != 6:
+              raise SystemExit(
+                  f"ERROR: modul tertanam harus 6, tetapi ditemukan {len(modul)}."
+              )
+
+          for nama, data in modul:
+              try:
+                  isi = base64.b64decode(data).decode("utf-8")
+              except Exception as exc:
+                  raise SystemExit(f"ERROR: modul {nama} gagal didekode: {exc}")
+
+              if "<html" not in isi.lower():
+                  raise SystemExit(f"ERROR: isi modul {nama} tidak valid.")
+
+          if "Rutinitas+ v5.8" not in teks:
+              raise SystemExit("ERROR: identitas Rutinitas+ v5.8 tidak ditemukan.")
+
+          print("index.html valid: 6 modul tertanam dan dapat didekode.")
+          PY
+
+      - name: Siapkan Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Siapkan Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
 
-      - name: Tentukan versi
-        id: versi
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            NAMA="${GITHUB_REF_NAME#v}"
-          else
-            NAMA="${{ github.event.inputs.versi }}"
-          fi
-          echo "nama=$NAMA" >> $GITHUB_OUTPUT
-          echo "kode=$GITHUB_RUN_NUMBER" >> $GITHUB_OUTPUT
-          echo "Versi $NAMA (kode $GITHUB_RUN_NUMBER)"
-
-      - name: Salin aplikasi ke dalam APK
+      - name: Buat proyek Android
+        shell: bash
         run: |
           set -e
-          TUJUAN=android/app/src/main/assets
-          mkdir -p "$TUJUAN"
-          cp index.html manifest.webmanifest sw.js "$TUJUAN"/
-          cp ikon-192.png ikon-512.png ikon-maskable-512.png apple-touch-icon.png "$TUJUAN"/
-          echo "Isi assets:"
-          ls -la "$TUJUAN"
-          # Berkas wajib harus benar-benar ada, kalau tidak APK-nya kosong.
-          for f in index.html manifest.webmanifest sw.js; do
-            test -s "$TUJUAN/$f" || { echo "Berkas kosong atau hilang: $f"; exit 1; }
-          done
 
-      - name: Siapkan kunci penanda tangan
-        id: kunci
-        env:
-          KUNCI_B64: ${{ secrets.KEYSTORE_BASE64 }}
+          mkdir -p app/src/main/java/com/rutinitasplus/app
+          mkdir -p app/src/main/assets
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/xml
+
+          cp index.html app/src/main/assets/index.html
+
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          rootProject.name = "RutinitasPlus"
+          include(":app")
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins {
+              id "com.android.application" version "8.5.2" apply false
+          }
+          EOF
+
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id "com.android.application"
+          }
+
+          android {
+              namespace "com.rutinitasplus.app"
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId "com.rutinitasplus.app"
+                  minSdk 23
+                  targetSdk 35
+                  versionCode 58
+                  versionName "5.8"
+              }
+          }
+
+          dependencies {
+              implementation "androidx.core:core:1.13.1"
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-permission android:name="android.permission.INTERNET"/>
+
+              <application
+                  android:allowBackup="true"
+                  android:label="Rutinitas+"
+                  android:theme="@style/AppTheme"
+                  android:usesCleartextTraffic="true">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:screenOrientation="portrait">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+
+                  <provider
+                      android:name="androidx.core.content.FileProvider"
+                      android:authorities="${applicationId}.fileprovider"
+                      android:exported="false"
+                      android:grantUriPermissions="true">
+                      <meta-data
+                          android:name="android.support.FILE_PROVIDER_PATHS"
+                          android:resource="@xml/file_paths"/>
+                  </provider>
+
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/res/xml/file_paths.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <paths xmlns:android="http://schemas.android.com/apk/res/android">
+              <cache-path name="camera_images" path="images/"/>
+          </paths>
+          EOF
+
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:windowActionModeOverlay">true</item>
+                  <item name="android:colorAccent">#35502F</item>
+                  <item name="android:navigationBarColor">#F7F8F3</item>
+                  <item name="android:statusBarColor">#1E3419</item>
+                  <item name="android:windowLightStatusBar">false</item>
+              </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/java/com/rutinitasplus/app/MainActivity.java <<'EOF'
+          package com.rutinitasplus.app;
+
+          import android.annotation.SuppressLint;
+          import android.app.Activity;
+          import android.content.ClipData;
+          import android.content.Intent;
+          import android.net.Uri;
+          import android.os.Bundle;
+          import android.provider.MediaStore;
+          import android.util.Base64;
+          import android.webkit.JavascriptInterface;
+          import android.webkit.ValueCallback;
+          import android.webkit.WebChromeClient;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import android.widget.Toast;
+
+          import androidx.core.content.FileProvider;
+          import androidx.core.view.WindowCompat;
+
+          import java.io.File;
+          import java.io.IOException;
+          import java.io.OutputStream;
+          import java.text.SimpleDateFormat;
+          import java.util.ArrayList;
+          import java.util.Date;
+          import java.util.List;
+          import java.util.Locale;
+
+          public class MainActivity extends Activity {
+
+              private static final int FILE_CHOOSER_REQUEST = 1001;
+              private static final int SAVE_FILE_REQUEST = 1002;
+
+              private WebView webView;
+              private ValueCallback<Uri[]> fileCallback;
+              private Uri cameraOutputUri;
+
+              private byte[] pendingDownloadBytes;
+              private String pendingDownloadName = "Rutinitas-Plus";
+              private String pendingDownloadMime = "application/octet-stream";
+
+              @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+
+                  WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
+
+                  webView = new WebView(this);
+                  setContentView(webView);
+
+                  WebSettings settings = webView.getSettings();
+                  settings.setJavaScriptEnabled(true);
+                  settings.setDomStorageEnabled(true);
+                  settings.setDatabaseEnabled(true);
+                  settings.setAllowFileAccess(true);
+                  settings.setAllowContentAccess(true);
+                  settings.setMediaPlaybackRequiresUserGesture(false);
+
+                  webView.addJavascriptInterface(new DownloadBridge(), "AndroidDownload");
+
+                  webView.setWebViewClient(new WebViewClient() {
+                      @Override
+                      public void onPageFinished(WebView view, String url) {
+                          super.onPageFinished(view, url);
+                          installDownloadHandler();
+                      }
+                  });
+
+                  webView.setWebChromeClient(new WebChromeClient() {
+                      @Override
+                      public boolean onShowFileChooser(
+                              WebView webView,
+                              ValueCallback<Uri[]> filePathCallback,
+                              FileChooserParams fileChooserParams
+                      ) {
+                          if (fileCallback != null) {
+                              fileCallback.onReceiveValue(null);
+                          }
+
+                          fileCallback = filePathCallback;
+                          cameraOutputUri = null;
+
+                          FileRequestType requestType = detectRequestType(fileChooserParams);
+
+                          Intent chooser;
+
+                          if (requestType == FileRequestType.PHOTO) {
+                              chooser = buildPhotoChooser(fileChooserParams);
+                          } else if (requestType == FileRequestType.BACKUP) {
+                              chooser = buildBackupChooser();
+                          } else {
+                              chooser = buildDocumentChooser(fileChooserParams);
+                          }
+
+                          try {
+                              startActivityForResult(chooser, FILE_CHOOSER_REQUEST);
+                              return true;
+                          } catch (Exception e) {
+                              fileCallback.onReceiveValue(null);
+                              fileCallback = null;
+                              Toast.makeText(
+                                  MainActivity.this,
+                                  "Tidak dapat membuka pemilih file",
+                                  Toast.LENGTH_LONG
+                              ).show();
+                              return false;
+                          }
+                      }
+                  });
+
+                  webView.loadUrl("file:///android_asset/index.html");
+              }
+
+              private enum FileRequestType {
+                  PHOTO,
+                  DOCUMENT,
+                  BACKUP
+              }
+
+              private FileRequestType detectRequestType(
+                      WebChromeClient.FileChooserParams params
+              ) {
+                  String[] accepted = params.getAcceptTypes();
+
+                  if (accepted != null) {
+                      for (String raw : accepted) {
+                          if (raw == null) continue;
+
+                          String value = raw.toLowerCase(Locale.ROOT).trim();
+
+                          if (value.contains(".rtns") || value.contains("rtns")) {
+                              return FileRequestType.BACKUP;
+                          }
+
+                          if (value.contains("image/")) {
+                              return FileRequestType.PHOTO;
+                          }
+                      }
+                  }
+
+                  return FileRequestType.DOCUMENT;
+              }
+
+              private Intent buildPhotoChooser(
+                      WebChromeClient.FileChooserParams params
+              ) {
+                  Intent galleryIntent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                  galleryIntent.addCategory(Intent.CATEGORY_OPENABLE);
+                  galleryIntent.setType("image/*");
+                  galleryIntent.putExtra(
+                          Intent.EXTRA_ALLOW_MULTIPLE,
+                          params.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE
+                  );
+
+                  List<Intent> extras = new ArrayList<>();
+                  Intent cameraIntent = createCameraIntent();
+
+                  if (cameraIntent != null) {
+                      extras.add(cameraIntent);
+                  }
+
+                  Intent chooser = new Intent(Intent.ACTION_CHOOSER);
+                  chooser.putExtra(Intent.EXTRA_INTENT, galleryIntent);
+                  chooser.putExtra(Intent.EXTRA_TITLE, "Pilih foto");
+
+                  if (!extras.isEmpty()) {
+                      chooser.putExtra(
+                              Intent.EXTRA_INITIAL_INTENTS,
+                              extras.toArray(new Intent[0])
+                      );
+                  }
+
+                  return chooser;
+              }
+
+              private Intent buildDocumentChooser(
+                      WebChromeClient.FileChooserParams params
+              ) {
+                  Intent documentIntent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                  documentIntent.addCategory(Intent.CATEGORY_OPENABLE);
+
+                  String[] mimeTypes = resolveMimeTypes(params);
+                  String primaryType = mimeTypes.length == 1
+                          ? mimeTypes[0]
+                          : "*/*";
+
+                  documentIntent.setType(primaryType);
+
+                  if (mimeTypes.length > 1) {
+                      documentIntent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
+                  }
+
+                  documentIntent.putExtra(
+                          Intent.EXTRA_ALLOW_MULTIPLE,
+                          params.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE
+                  );
+
+                  Intent chooser = new Intent(Intent.ACTION_CHOOSER);
+                  chooser.putExtra(Intent.EXTRA_INTENT, documentIntent);
+                  chooser.putExtra(Intent.EXTRA_TITLE, "Pilih lampiran");
+
+                  return chooser;
+              }
+
+              private Intent buildBackupChooser() {
+                  Intent backupIntent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                  backupIntent.addCategory(Intent.CATEGORY_OPENABLE);
+                  backupIntent.setType("application/octet-stream");
+
+                  String[] backupTypes = new String[]{
+                          "application/octet-stream",
+                          "application/json",
+                          "text/plain"
+                  };
+                  backupIntent.putExtra(Intent.EXTRA_MIME_TYPES, backupTypes);
+
+                  Intent chooser = new Intent(Intent.ACTION_CHOOSER);
+                  chooser.putExtra(Intent.EXTRA_INTENT, backupIntent);
+                  chooser.putExtra(Intent.EXTRA_TITLE, "Pilih cadangan Rutinitas+ (.rtns)");
+
+                  return chooser;
+              }
+
+              private String[] resolveMimeTypes(
+                      WebChromeClient.FileChooserParams params
+              ) {
+                  List<String> result = new ArrayList<>();
+                  String[] accepted = params.getAcceptTypes();
+
+                  if (accepted != null) {
+                      for (String raw : accepted) {
+                          if (raw == null || raw.trim().isEmpty()) continue;
+
+                          String[] parts = raw.split(",");
+
+                          for (String part : parts) {
+                              String value = part.trim().toLowerCase(Locale.ROOT);
+
+                              if (value.startsWith(".")) {
+                                  String mime = extensionToMime(value);
+                                  if (mime != null && !result.contains(mime)) {
+                                      result.add(mime);
+                                  }
+                              } else if (value.contains("/")) {
+                                  if (!result.contains(value)) {
+                                      result.add(value);
+                                  }
+                              }
+                          }
+                      }
+                  }
+
+                  if (result.isEmpty()) {
+                      result.add("*/*");
+                  }
+
+                  return result.toArray(new String[0]);
+              }
+
+              private String extensionToMime(String extension) {
+                  switch (extension) {
+                      case ".pdf":
+                          return "application/pdf";
+                      case ".doc":
+                          return "application/msword";
+                      case ".docx":
+                          return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+                      case ".xls":
+                          return "application/vnd.ms-excel";
+                      case ".xlsx":
+                          return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                      case ".ppt":
+                          return "application/vnd.ms-powerpoint";
+                      case ".pptx":
+                          return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+                      case ".txt":
+                          return "text/plain";
+                      case ".csv":
+                          return "text/csv";
+                      case ".zip":
+                          return "application/zip";
+                      case ".jpg":
+                      case ".jpeg":
+                          return "image/jpeg";
+                      case ".png":
+                          return "image/png";
+                      default:
+                          return null;
+                  }
+              }
+
+              private void installDownloadHandler() {
+                  String script =
+                      "(function(){" +
+                      "function pasang(w){" +
+                      " try{" +
+                      "  if(!w||w.__rutinitasDownloadFixed)return;" +
+                      "  w.__rutinitasDownloadFixed=true;" +
+                      "  const map=new Map();" +
+                      "  const asli=w.URL.createObjectURL.bind(w.URL);" +
+                      "  w.URL.createObjectURL=function(blob){" +
+                      "    const u=asli(blob); map.set(u,blob); return u;" +
+                      "  };" +
+                      "  const klik=w.HTMLAnchorElement.prototype.click;" +
+                      "  w.HTMLAnchorElement.prototype.click=function(){" +
+                      "    const href=this.href||'';" +
+                      "    const blob=map.get(href);" +
+                      "    if(blob && this.download){" +
+                      "      const nama=this.download||'Rutinitas-Plus';" +
+                      "      const reader=new FileReader();" +
+                      "      reader.onloadend=function(){" +
+                      "        try{" +
+                      "          const hasil=String(reader.result||'');" +
+                      "          const data=hasil.indexOf(',')>=0?hasil.split(',')[1]:hasil;" +
+                      "          AndroidDownload.saveBase64(nama,blob.type||'application/octet-stream',data);" +
+                      "        }catch(e){}" +
+                      "      };" +
+                      "      reader.readAsDataURL(blob);" +
+                      "      return;" +
+                      "    }" +
+                      "    return klik.apply(this,arguments);" +
+                      "  };" +
+                      " }catch(e){}" +
+                      "}" +
+                      "pasang(window);" +
+                      "function scan(){" +
+                      " try{" +
+                      "  document.querySelectorAll('iframe').forEach(function(f){" +
+                      "   try{pasang(f.contentWindow);}catch(e){}" +
+                      "  });" +
+                      " }catch(e){}" +
+                      "}" +
+                      "scan();" +
+                      "setInterval(scan,500);" +
+                      "})();";
+
+                  webView.evaluateJavascript(script, null);
+              }
+
+              public class DownloadBridge {
+                  @JavascriptInterface
+                  public void saveBase64(String filename, String mimeType, String base64Data) {
+                      try {
+                          pendingDownloadBytes = Base64.decode(base64Data, Base64.DEFAULT);
+                          pendingDownloadName = sanitizeFilename(filename);
+                          pendingDownloadMime =
+                                  mimeType == null || mimeType.trim().isEmpty()
+                                      ? "application/octet-stream"
+                                      : mimeType.trim();
+
+                          runOnUiThread(() -> {
+                              Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                              intent.addCategory(Intent.CATEGORY_OPENABLE);
+                              intent.setType(pendingDownloadMime);
+                              intent.putExtra(Intent.EXTRA_TITLE, pendingDownloadName);
+
+                              try {
+                                  startActivityForResult(intent, SAVE_FILE_REQUEST);
+                              } catch (Exception e) {
+                                  pendingDownloadBytes = null;
+                                  Toast.makeText(
+                                      MainActivity.this,
+                                      "Tidak dapat membuka lokasi penyimpanan",
+                                      Toast.LENGTH_LONG
+                                  ).show();
+                              }
+                          });
+                      } catch (Exception e) {
+                          pendingDownloadBytes = null;
+                          runOnUiThread(() -> Toast.makeText(
+                              MainActivity.this,
+                              "File gagal diproses",
+                              Toast.LENGTH_LONG
+                          ).show());
+                      }
+                  }
+              }
+
+              private String sanitizeFilename(String filename) {
+                  String name = filename == null ? "" : filename.trim();
+
+                  if (name.isEmpty()) {
+                      name = "Rutinitas-Plus";
+                  }
+
+                  return name.replaceAll("[\\\\/:*?\"<>|]", "_");
+              }
+
+              private Intent createCameraIntent() {
+                  Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+
+                  if (cameraIntent.resolveActivity(getPackageManager()) == null) {
+                      return null;
+                  }
+
+                  try {
+                      File imageDir = new File(getCacheDir(), "images");
+
+                      if (!imageDir.exists() && !imageDir.mkdirs()) {
+                          return null;
+                      }
+
+                      String timestamp = new SimpleDateFormat(
+                              "yyyyMMdd_HHmmss",
+                              Locale.US
+                      ).format(new Date());
+
+                      File imageFile = File.createTempFile(
+                              "IMG_" + timestamp + "_",
+                              ".jpg",
+                              imageDir
+                      );
+
+                      cameraOutputUri = FileProvider.getUriForFile(
+                              this,
+                              getPackageName() + ".fileprovider",
+                              imageFile
+                      );
+
+                      cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, cameraOutputUri);
+                      cameraIntent.addFlags(
+                              Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                              Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                      );
+
+                      return cameraIntent;
+                  } catch (IOException e) {
+                      cameraOutputUri = null;
+                      return null;
+                  }
+              }
+
+              @Override
+              protected void onActivityResult(
+                      int requestCode,
+                      int resultCode,
+                      Intent data
+              ) {
+                  super.onActivityResult(requestCode, resultCode, data);
+
+                  if (requestCode == SAVE_FILE_REQUEST) {
+                      if (resultCode == RESULT_OK
+                              && data != null
+                              && data.getData() != null
+                              && pendingDownloadBytes != null) {
+                          Uri target = data.getData();
+
+                          try (OutputStream output =
+                                       getContentResolver().openOutputStream(target)) {
+                              if (output == null) {
+                                  throw new IOException("Output stream kosong");
+                              }
+
+                              output.write(pendingDownloadBytes);
+                              output.flush();
+
+                              Toast.makeText(
+                                  this,
+                                  "File berhasil disimpan",
+                                  Toast.LENGTH_LONG
+                              ).show();
+                          } catch (Exception e) {
+                              Toast.makeText(
+                                  this,
+                                  "Gagal menyimpan file",
+                                  Toast.LENGTH_LONG
+                              ).show();
+                          }
+                      }
+
+                      pendingDownloadBytes = null;
+                      return;
+                  }
+
+                  if (requestCode != FILE_CHOOSER_REQUEST || fileCallback == null) {
+                      return;
+                  }
+
+                  Uri[] results = null;
+
+                  if (resultCode == RESULT_OK) {
+                      if (data == null || data.getData() == null) {
+                          if (cameraOutputUri != null) {
+                              results = new Uri[]{cameraOutputUri};
+                          }
+                      } else {
+                          ClipData clipData = data.getClipData();
+
+                          if (clipData != null) {
+                              results = new Uri[clipData.getItemCount()];
+
+                              for (int i = 0; i < clipData.getItemCount(); i++) {
+                                  results[i] = clipData.getItemAt(i).getUri();
+                              }
+                          } else {
+                              results = new Uri[]{data.getData()};
+                          }
+                      }
+                  }
+
+                  fileCallback.onReceiveValue(results);
+                  fileCallback = null;
+                  cameraOutputUri = null;
+              }
+
+              @Override
+              public void onBackPressed() {
+                  if (webView != null && webView.canGoBack()) {
+                      webView.goBack();
+                  } else {
+                      super.onBackPressed();
+                  }
+              }
+          }
+          EOF
+
+      - name: Build APK debug
+        run: gradle --no-daemon :app:assembleDebug --stacktrace
+
+      - name: Ganti nama APK
         run: |
-          if [ -n "$KUNCI_B64" ]; then
-            echo "$KUNCI_B64" | base64 -d > "$RUNNER_TEMP/kunci.jks"
-            echo "ada=ya" >> $GITHUB_OUTPUT
-            echo "Kunci penanda tangan tersedia — APK akan ditandatangani untuk rilis."
-          else
-            echo "ada=tidak" >> $GITHUB_OUTPUT
-            echo "::warning::Tidak ada KEYSTORE_BASE64. APK dibangun sebagai debug."
-            echo "::warning::APK debug tidak bisa memperbarui APK yang ditandatangani kunci lain — perlu hapus pasang."
-          fi
+          mkdir -p hasil-apk
+          cp app/build/outputs/apk/debug/app-debug.apk \
+             hasil-apk/Rutinitas-Plus-v5.8.apk
 
-      - name: Bangun APK rilis
-        if: steps.kunci.outputs.ada == 'ya'
-        working-directory: android
-        env:
-          BERKAS_KUNCI: ${{ runner.temp }}/kunci.jks
-          SANDI_KUNCI:  ${{ secrets.KEYSTORE_PASSWORD }}
-          ALIAS_KUNCI:  ${{ secrets.KEY_ALIAS }}
-          SANDI_ALIAS:  ${{ secrets.KEY_PASSWORD }}
-        run: |
-          gradle assembleRelease --no-daemon \
-            -PnamaVersi=${{ steps.versi.outputs.nama }} \
-            -PkodeVersi=${{ steps.versi.outputs.kode }}
-
-      - name: Bangun APK debug
-        if: steps.kunci.outputs.ada != 'ya'
-        working-directory: android
-        run: |
-          gradle assembleDebug --no-daemon \
-            -PnamaVersi=${{ steps.versi.outputs.nama }} \
-            -PkodeVersi=${{ steps.versi.outputs.kode }}
-
-      - name: Beri nama berkas
-        id: berkas
-        run: |
-          set -e
-          ASAL=$(find android/app/build/outputs/apk -name '*.apk' | head -n 1)
-          test -n "$ASAL" || { echo "APK tidak ditemukan"; exit 1; }
-          TUJUAN="Rutinitas-Plus-v${{ steps.versi.outputs.nama }}.apk"
-          cp "$ASAL" "$TUJUAN"
-          echo "nama=$TUJUAN" >> $GITHUB_OUTPUT
-          echo "Ukuran: $(( $(stat -c%s "$TUJUAN") / 1024 )) KB"
-
-      - name: Unggah sebagai lampiran alur kerja
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: apk
-          path: ${{ steps.berkas.outputs.nama }}
+          name: Rutinitas-Plus-v5.8-APK
+          path: hasil-apk/Rutinitas-Plus-v5.8.apk
+          if-no-files-found: error
           retention-days: 30
-
-      - name: Terbitkan sebagai rilis
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ${{ steps.berkas.outputs.nama }}
-          body: |
-            **Rutinitas+ v${{ steps.versi.outputs.nama }}**
-
-            Unduh berkas `.apk` di bawah, lalu pasang di ponsel.
-            Android akan meminta izin memasang dari sumber tidak dikenal — itu wajar
-            untuk aplikasi yang tidak lewat Play Store.
-
-            Seluruh data tetap tersimpan di perangkat. Cadangkan lebih dulu lewat
-            **Beranda → Alat & pengelolaan → Cadangkan semua sekarang** sebelum
-            memperbarui versi.
-
-      - name: Ringkasan
-        run: |
-          echo "### APK selesai dibangun" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Berkas: \`${{ steps.berkas.outputs.nama }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "Ditandatangani: ${{ steps.kunci.outputs.ada == 'ya' && 'ya (rilis)' || 'tidak (debug)' }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Unduh dari bagian **Artifacts** di halaman ini." >> $GITHUB_STEP_SUMMARY
