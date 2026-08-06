@@ -6,14 +6,18 @@
    ============================================================ */
 const fs = require('fs');
 const path = require('path');
-const { JSDOM } = require('jsdom');
+const { JSDOM, VirtualConsole } = require('jsdom');
 const fake = require('fake-indexeddb');
+const { TextEncoder, TextDecoder } = require('util');
 
 const AKAR = __dirname;
 const BERKAS = path.join(AKAR, 'index.html');
 
 let lulus = 0, gagal = 0;
 const catatan = [];
+/* Kemampuan peramban yang tidak dimiliki jsdom. Bukan kegagalan aplikasi,
+   tapi dicatat supaya jelas bagian mana yang belum teruji otomatis. */
+const takTeruji = new Set();
 
 function periksa(nama, syarat, keterangan) {
   if (syarat) { lulus++; console.log('  ok    ' + nama); }
@@ -34,13 +38,41 @@ const NAMA = Object.keys(modul);
 
 /* ---------- alat bantu ---------- */
 function jendela(html, gelap) {
-  const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true, url: 'https://uji.test/' });
-  const w = dom.window;
-  w.indexedDB = fake.indexedDB;
-  w.IDBKeyRange = fake.IDBKeyRange;
-  w.URL.createObjectURL = () => 'blob:uji';
-  w.URL.revokeObjectURL = () => {};
   const galat = [];
+
+  /* jsdom melaporkan galat evaluasi skrip lewat konsol maya, bukan window.onerror.
+     Tanpa ini, skrip yang berhenti di tengah jalan lolos dari pengujian. */
+  const konsol = new VirtualConsole();
+  konsol.on('jsdomError', e => {
+    const pesan = (e && e.message) || String(e);
+    if (e && e.type === 'css parsing') return;          /* pengurai CSS jsdom terbatas */
+    if (/^Not implemented:/.test(pesan)) {              /* kemampuan peramban yang tak ada di jsdom */
+      takTeruji.add(pesan.replace(/^Not implemented:\s*/, '').split(':')[0].trim());
+      return;
+    }
+    galat.push(pesan);
+  });
+
+  const dom = new JSDOM(html, {
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    url: 'https://uji.test/',
+    virtualConsole: konsol,
+    /* Sediakan yang sudah ada di peramban sungguhan tapi belum ada di jsdom.
+       Bukan tambalan untuk aplikasi — hanya menyamakan lingkungan uji. */
+    beforeParse(window) {
+      if (!window.TextEncoder) window.TextEncoder = TextEncoder;
+      if (!window.TextDecoder) window.TextDecoder = TextDecoder;
+      if (!window.structuredClone) window.structuredClone = o => JSON.parse(JSON.stringify(o));
+      window.indexedDB = fake.indexedDB;
+      window.IDBKeyRange = fake.IDBKeyRange;
+      window.URL.createObjectURL = () => 'blob:uji';
+      window.URL.revokeObjectURL = () => {};
+      /* tema gelap dipasang setelah dokumen selesai diurai, bukan di sini —
+         documentElement belum ada pada tahap beforeParse */
+    }
+  });
+  const w = dom.window;
   w.onerror = m => galat.push(String(m));
   w.addEventListener('unhandledrejection', e => galat.push('promise: ' + e.reason));
   if (gelap) w.document.documentElement.setAttribute('data-rp-theme', 'dark');
@@ -83,6 +115,28 @@ async function jalankan() {
     const { galat } = jendela(modul[n]);
     await tunggu(700);
     periksa('muat ' + n, galat.length === 0, galat.slice(0, 2).join(' | '));
+  }
+
+  bagian('Skrip dijalankan sampai habis');
+  /* Deklarasi fungsi terangkat, jadi fungsi bisa "ada" meski skrip berhenti di
+     tengah. Yang membuktikan skrip tuntas adalah nilai yang dibuat const/let. */
+  const PENANDA = {
+    beranda: ['iso', 'IK', 'Cadangan', 'FotoDB', 'Kalender', 'MiniPDF', 'Batal'],
+    routine: ['PAGI', 'SORE', 'MiniPDF', 'Batal'],
+    kantor:  ['KUNCI', 'FotoDB', 'MiniPDF', 'Kalender', 'Batal'],
+    pribadi: ['KUNCI', 'FotoDB', 'MiniPDF', 'Kalender', 'Batal'],
+    note:    ['PRA', 'FotoDB', 'MiniPDF', 'Batal'],
+    report:  ['PRA_LAP', 'FotoDB', 'MiniPDF', 'Batal']
+  };
+  for (const n of NAMA) {
+    const { w } = jendela(modul[n]);
+    await tunggu(600);
+    const hilang = (PENANDA[n] || []).filter(v => {
+      try { return typeof w.eval('typeof ' + v) === 'string' && w.eval('typeof ' + v) === 'undefined'; }
+      catch (e) { return true; }
+    });
+    periksa('skrip ' + n + ' tuntas dievaluasi', hilang.length === 0,
+      'belum terinisialisasi: ' + hilang.join(', '));
   }
 
   bagian('Mode gelap terbaca');
@@ -365,8 +419,12 @@ async function jalankan() {
     catatan.forEach(c => console.log('   - ' + c));
   }
   console.log('='.repeat(52));
-  console.log('\nCatatan: pengujian ini tidak dapat memeriksa kamera, galeri,');
-  console.log('papan ketik, tombol kembali, pemasangan APK, dan performa.');
+  if (takTeruji.size) {
+    console.log('\nTidak dapat diuji di sini (kemampuan peramban yang tidak dimiliki jsdom):');
+    [...takTeruji].forEach(x => console.log('   - ' + x));
+  }
+  console.log('\nJuga tidak dapat diperiksa: kamera, galeri, papan ketik,');
+  console.log('tombol kembali, pemasangan APK, dan performa.');
   console.log('Butir-butir itu tetap harus dicoba langsung di ponsel.\n');
   process.exit(gagal ? 1 : 0);
 }
