@@ -1,0 +1,139 @@
+name: Bangun APK
+
+# Dijalankan manual, atau otomatis saat penanda versi didorong (mis. v5.8).
+on:
+  workflow_dispatch:
+    inputs:
+      versi:
+        description: 'Nama versi, mis. 5.8'
+        required: true
+        default: '5.8'
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  bangun:
+    name: Bangun APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ambil kode
+        uses: actions/checkout@v4
+
+      - name: Siapkan Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Siapkan Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Tentukan versi
+        id: versi
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            NAMA="${GITHUB_REF_NAME#v}"
+          else
+            NAMA="${{ github.event.inputs.versi }}"
+          fi
+          echo "nama=$NAMA" >> $GITHUB_OUTPUT
+          echo "kode=$GITHUB_RUN_NUMBER" >> $GITHUB_OUTPUT
+          echo "Versi $NAMA (kode $GITHUB_RUN_NUMBER)"
+
+      - name: Salin aplikasi ke dalam APK
+        run: |
+          set -e
+          TUJUAN=android/app/src/main/assets
+          mkdir -p "$TUJUAN"
+          cp index.html manifest.webmanifest sw.js "$TUJUAN"/
+          cp ikon-192.png ikon-512.png ikon-maskable-512.png apple-touch-icon.png "$TUJUAN"/
+          echo "Isi assets:"
+          ls -la "$TUJUAN"
+          # Berkas wajib harus benar-benar ada, kalau tidak APK-nya kosong.
+          for f in index.html manifest.webmanifest sw.js; do
+            test -s "$TUJUAN/$f" || { echo "Berkas kosong atau hilang: $f"; exit 1; }
+          done
+
+      - name: Siapkan kunci penanda tangan
+        id: kunci
+        env:
+          KUNCI_B64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KUNCI_B64" ]; then
+            echo "$KUNCI_B64" | base64 -d > "$RUNNER_TEMP/kunci.jks"
+            echo "ada=ya" >> $GITHUB_OUTPUT
+            echo "Kunci penanda tangan tersedia — APK akan ditandatangani untuk rilis."
+          else
+            echo "ada=tidak" >> $GITHUB_OUTPUT
+            echo "::warning::Tidak ada KEYSTORE_BASE64. APK dibangun sebagai debug."
+            echo "::warning::APK debug tidak bisa memperbarui APK yang ditandatangani kunci lain — perlu hapus pasang."
+          fi
+
+      - name: Bangun APK rilis
+        if: steps.kunci.outputs.ada == 'ya'
+        working-directory: android
+        env:
+          BERKAS_KUNCI: ${{ runner.temp }}/kunci.jks
+          SANDI_KUNCI:  ${{ secrets.KEYSTORE_PASSWORD }}
+          ALIAS_KUNCI:  ${{ secrets.KEY_ALIAS }}
+          SANDI_ALIAS:  ${{ secrets.KEY_PASSWORD }}
+        run: |
+          gradle assembleRelease --no-daemon \
+            -PnamaVersi=${{ steps.versi.outputs.nama }} \
+            -PkodeVersi=${{ steps.versi.outputs.kode }}
+
+      - name: Bangun APK debug
+        if: steps.kunci.outputs.ada != 'ya'
+        working-directory: android
+        run: |
+          gradle assembleDebug --no-daemon \
+            -PnamaVersi=${{ steps.versi.outputs.nama }} \
+            -PkodeVersi=${{ steps.versi.outputs.kode }}
+
+      - name: Beri nama berkas
+        id: berkas
+        run: |
+          set -e
+          ASAL=$(find android/app/build/outputs/apk -name '*.apk' | head -n 1)
+          test -n "$ASAL" || { echo "APK tidak ditemukan"; exit 1; }
+          TUJUAN="Rutinitas-Plus-v${{ steps.versi.outputs.nama }}.apk"
+          cp "$ASAL" "$TUJUAN"
+          echo "nama=$TUJUAN" >> $GITHUB_OUTPUT
+          echo "Ukuran: $(( $(stat -c%s "$TUJUAN") / 1024 )) KB"
+
+      - name: Unggah sebagai lampiran alur kerja
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: ${{ steps.berkas.outputs.nama }}
+          retention-days: 30
+
+      - name: Terbitkan sebagai rilis
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.berkas.outputs.nama }}
+          body: |
+            **Rutinitas+ v${{ steps.versi.outputs.nama }}**
+
+            Unduh berkas `.apk` di bawah, lalu pasang di ponsel.
+            Android akan meminta izin memasang dari sumber tidak dikenal — itu wajar
+            untuk aplikasi yang tidak lewat Play Store.
+
+            Seluruh data tetap tersimpan di perangkat. Cadangkan lebih dulu lewat
+            **Beranda → Alat & pengelolaan → Cadangkan semua sekarang** sebelum
+            memperbarui versi.
+
+      - name: Ringkasan
+        run: |
+          echo "### APK selesai dibangun" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Berkas: \`${{ steps.berkas.outputs.nama }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "Ditandatangani: ${{ steps.kunci.outputs.ada == 'ya' && 'ya (rilis)' || 'tidak (debug)' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Unduh dari bagian **Artifacts** di halaman ini." >> $GITHUB_STEP_SUMMARY
