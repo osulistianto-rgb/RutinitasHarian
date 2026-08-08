@@ -35,7 +35,10 @@ jobs:
           node-version: '20'
 
       - name: Pasang kebutuhan pengujian
-        run: npm install --no-audit --no-fund
+        run: |
+          # Pasang langsung, tanpa bergantung pada package.json.
+          # Repositori ini boleh berisi index.html dan uji.js saja.
+          npm install --no-audit --no-fund --no-save jsdom@^24 fake-indexeddb@^5
 
       - name: Jalankan pengujian
         run: node uji.js
