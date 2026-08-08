@@ -1,0 +1,13 @@
+{
+  "name": "rutinitas-plus",
+  "version": "5.12.0",
+  "private": true,
+  "description": "Pencatat rutinitas, pekerjaan kantor, urusan pribadi, laporan, dan dokumentasi harian. Bekerja luring; seluruh data tersimpan di perangkat.",
+  "scripts": {
+    "uji": "node uji.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0",
+    "fake-indexeddb": "^5.0.0"
+  }
+}
