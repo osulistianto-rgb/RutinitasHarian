@@ -63,12 +63,12 @@ jobs:
           Path('.github/workflows/siapkan-v512.yml').unlink()
           PY
 
-          grep -q '<title>Rutinitas+ v5.12</title>' index.html
-          grep -q 'Rutinitas+ v5.12' .github/workflows/bangun-apk-v512.yml
-          grep -q '?: "512").toInteger()' .github/workflows/bangun-apk-v512.yml
-          grep -q 'NAMA_VERSI") ?: "5.12"' .github/workflows/bangun-apk-v512.yml
-          grep -q 'Rutinitas-Plus-v5.12.apk' .github/workflows/bangun-apk-v512.yml
-          ! grep -q 'v5.11' .github/workflows/bangun-apk-v512.yml
+          grep -Fq '<title>Rutinitas+ v5.12</title>' index.html
+          grep -Fq 'Rutinitas+ v5.12' .github/workflows/bangun-apk-v512.yml
+          grep -Fq '?: "512").toInteger()' .github/workflows/bangun-apk-v512.yml
+          grep -Fq 'NAMA_VERSI") ?: "5.12"' .github/workflows/bangun-apk-v512.yml
+          grep -Fq 'Rutinitas-Plus-v5.12.apk' .github/workflows/bangun-apk-v512.yml
+          ! grep -Fq 'v5.11' .github/workflows/bangun-apk-v512.yml
 
       - name: Simpan perubahan
         shell: bash
