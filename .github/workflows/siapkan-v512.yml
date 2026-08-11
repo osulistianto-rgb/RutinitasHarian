@@ -1,0 +1,81 @@
+name: Siapkan Rutinitas+ v5.12
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - ".github/workflows/siapkan-v512.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sinkronkan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ambil repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sinkronkan identitas v5.12
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          index = Path('index.html')
+          teks = index.read_text(encoding='utf-8')
+          lama = '<title>Rutinitas+ v5.11</title>'
+          baru = '<title>Rutinitas+ v5.12</title>'
+          if lama in teks:
+              if teks.count(lama) != 1:
+                  raise SystemExit(f'Title v5.11 harus tepat satu, ditemukan {teks.count(lama)}')
+              teks = teks.replace(lama, baru, 1)
+          elif teks.count(baru) != 1:
+              raise SystemExit('Title versi tidak berada pada kondisi v5.11 atau v5.12 yang diharapkan')
+          index.write_text(teks, encoding='utf-8')
+
+          lama_wf = Path('.github/workflows/bangun-apk-v511-fix-gradle.yml')
+          baru_wf = Path('.github/workflows/bangun-apk-v512.yml')
+
+          if lama_wf.exists():
+              wf = lama_wf.read_text(encoding='utf-8')
+              wajib = [
+                  'Rutinitas+ v5.11',
+                  'versionCode = (System.getenv("KODE_VERSI") ?: "511").toInteger()',
+                  'versionName = System.getenv("NAMA_VERSI") ?: "5.11"',
+                  'Rutinitas-Plus-v5.11.apk',
+              ]
+              hilang = [x for x in wajib if x not in wf]
+              if hilang:
+                  raise SystemExit('Pola workflow v5.11 tidak ditemukan: ' + repr(hilang))
+              wf = wf.replace('v5.11', 'v5.12')
+              wf = wf.replace('?: "511").toInteger()', '?: "512").toInteger()')
+              baru_wf.write_text(wf, encoding='utf-8')
+              lama_wf.unlink()
+          elif not baru_wf.exists():
+              raise SystemExit('Workflow build v5.11 maupun v5.12 tidak ditemukan')
+
+          # Hapus migrator satu kali setelah tugasnya selesai.
+          Path('.github/workflows/siapkan-v512.yml').unlink()
+          PY
+
+          grep -q '<title>Rutinitas+ v5.12</title>' index.html
+          grep -q 'Rutinitas+ v5.12' .github/workflows/bangun-apk-v512.yml
+          grep -q '?: "512").toInteger()' .github/workflows/bangun-apk-v512.yml
+          grep -q 'NAMA_VERSI") ?: "5.12"' .github/workflows/bangun-apk-v512.yml
+          grep -q 'Rutinitas-Plus-v5.12.apk' .github/workflows/bangun-apk-v512.yml
+          ! grep -q 'v5.11' .github/workflows/bangun-apk-v512.yml
+
+      - name: Simpan perubahan
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: sinkronkan identitas Rutinitas+ v5.12"
+          git push origin HEAD:main
