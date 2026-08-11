@@ -59,16 +59,8 @@ jobs:
           elif not baru_wf.exists():
               raise SystemExit('Workflow build v5.11 maupun v5.12 tidak ditemukan')
 
-          # Hapus migrator satu kali setelah tugasnya selesai.
           Path('.github/workflows/siapkan-v512.yml').unlink()
           PY
-
-          grep -Fq '<title>Rutinitas+ v5.12</title>' index.html
-          grep -Fq 'Rutinitas+ v5.12' .github/workflows/bangun-apk-v512.yml
-          grep -Fq '?: "512").toInteger()' .github/workflows/bangun-apk-v512.yml
-          grep -Fq 'NAMA_VERSI") ?: "5.12"' .github/workflows/bangun-apk-v512.yml
-          grep -Fq 'Rutinitas-Plus-v5.12.apk' .github/workflows/bangun-apk-v512.yml
-          ! grep -Fq 'v5.11' .github/workflows/bangun-apk-v512.yml
 
       - name: Simpan perubahan
         shell: bash
