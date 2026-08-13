@@ -1,0 +1,56 @@
+name: Terapkan peningkatan Rutinitas Plus v5.15
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "tools/upgrade_v515.py.gz.b64"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Terapkan peningkatan aplikasi
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s tools/upgrade_v515.py.gz.b64
+          base64 -d tools/upgrade_v515.py.gz.b64 | gzip -d > "$RUNNER_TEMP/upgrade_v515.py"
+          python3 "$RUNNER_TEMP/upgrade_v515.py" index.html
+          test -s index.html
+          grep -q "Rutinitas+ v5.15" index.html
+          grep -q "PUSTAKA_BERSAMA" index.html
+          grep -q "PEKERJAAN_DASAR" index.html
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/bangun-apk-v511-fix-gradle.yml')
+          s=p.read_text()
+          s=s.replace('Bangun APK Rutinitas Plus v5.12 — Mesin Pekerjaan Terpadu','Bangun APK Rutinitas Plus v5.15 — Mesin Pekerjaan Terpadu')
+          s=s.replace('grep -q "Rutinitas+ v5.12" index.html','grep -q "Rutinitas+" index.html')
+          s=s.replace('echo "index.html v5.12 lolos pemeriksaan."','echo "index.html terbaru lolos pemeriksaan."')
+          s=s.replace('(System.getenv("KODE_VERSI") ?: "512").toInteger()','(System.getenv("KODE_VERSI") ?: "515").toInteger()')
+          s=s.replace('System.getenv("NAMA_VERSI") ?: "5.12"','System.getenv("NAMA_VERSI") ?: "5.15"')
+          s=s.replace('Rutinitas-Plus-v5.12.apk','Rutinitas-Plus-v5.15.apk')
+          s=s.replace('Rutinitas-Plus-v5.12-APK','Rutinitas-Plus-v5.15-APK')
+          p.write_text(s)
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html .github/workflows/bangun-apk-v511-fix-gradle.yml
+          if git diff --cached --quiet; then
+            echo "Aplikasi sudah pada versi target."
+            exit 0
+          fi
+          git commit -m "Upgrade Rutinitas+ v5.15"
+          git push
