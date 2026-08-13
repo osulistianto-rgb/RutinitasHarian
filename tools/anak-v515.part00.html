@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Pendamping Belajar Anak · Rutinitas+</title>
+<style>
+:root{--bg:#f1f4ed;--card:#fff;--ink:#18211c;--muted:#6f7c72;--line:#dfe5dc;--olive:#35502f;--deep:#1e3419;--tint:#edf3e9;--red:#9a3b2c;--amber:#9a6b33;--blue:#2f5a7a}
+html[data-theme="dark"]{--bg:#111711;--card:#182018;--ink:#edf2ea;--muted:#a9b5a9;--line:#334033;--olive:#8fbe7e;--deep:#dbe8d5;--tint:#222d20}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+header{background:linear-gradient(160deg,#2a4425,#1e3419);color:#eef4eb;padding:18px 16px 16px}
+header h1{margin:0;font-size:21px}header p{margin:5px 0 0;font-size:12px;opacity:.78}
+main{padding:14px 14px 36px;max-width:760px;margin:auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:17px;padding:15px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,.035)}
+h2{font-size:17px;margin:5px 0 12px}h3{font-size:14px;margin:0 0 7px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}.muted{color:var(--muted);font-size:12px}.big{font-size:30px;font-weight:800}
+input,select,textarea{width:100%;padding:11px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--ink);font:inherit;margin:5px 0 10px}
+label{font-size:12px;font-weight:750;color:var(--muted)}
+button{border:0;border-radius:11px;padding:10px 13px;background:#e6ece2;color:#294123;font-weight:750;font:inherit}
+button.primary{background:var(--olive);color:white}button.red{background:#f6e8e5;color:var(--red)}button.full{width:100%}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}.pill{font-size:11px;font-weight:800;border-radius:99px;padding:4px 8px;background:var(--tint)}
+.task{border-left:4px solid var(--olive)}.task.telat{border-left-color:var(--red)}.task.selesai{opacity:.64}
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}.tabs button.active{background:var(--olive);color:#fff}
+.sec{display:none}.sec.active{display:block}.empty{text-align:center;color:var(--muted);padding:22px 8px}
+hr{border:0;border-top:1px solid var(--line);margin:12px 0}.score{font-size:36px;font-weight:850}.good{color:#2e7d52}.warn{color:var(--amber)}.bad{color:var(--red)}
+details summary{cursor:pointer;font-weight:750}.notice{padding:10px 12px;border-radius:12px;background:var(--tint);font-size:13px;margin-bottom:12px}
+.photoPreview{width:100%;max-height:280px;object-fit:cover;border-radius:12px;border:1px solid var(--line);margin-top:8px}
+.photoBox{margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:12px;background:var(--tint)}
+.smallbtn{padding:8px 10px;font-size:12px}
+</style></head><body>
+<header><h1>Pendamping Belajar Anak</h1><p>Anda mengatur tugas dan pengingat · anak cukup merespons dan menyelesaikan</p></header>
+<main>
+<div class="tabs" style="grid-template-columns:repeat(5,1fr)">
+<button class="active" onclick="tab('dashboard',this)">Hari Ini</button>
+<button onclick="tab('tugas',this)">Tugas</button>
+<button onclick="tab('arsip',this)">Arsip</button>
+<button onclick="tab('minggu',this)">Mingguan</button>
+<button onclick="tab('atur',this)">Atur</button>
+</div>
+
+<section id="dashboard" class="sec active">
+<div id="dashboardAnak"></div>
+</section>
+
+<section id="tugas" class="sec">
+<div class="notice"><b>Prinsip:</b> Anda yang menjalankan sistem. Pengingat dibuat singkat agar anak tidak perlu membuka aplikasi ini setiap hari.</div>
+<div class="card">
+<h2>Tambah Pengingat Belajar</h2>
+<label>Mata pelajaran</label><input id="subjek" placeholder="Matematika">
+<label>Tugas / materi</label><input id="judul" placeholder="Latihan halaman 45–47">
+<div class="grid2"><div><label>Deadline</label><input id="deadline" type="date"></div><div><label>Target belajar</label><input id="menit" type="number" min="5" step="5" value="30"></div></div>
+<label>Waktu pengingat</label><input id="ingat" type="datetime-local">
+<label>Simpan ke Rutinitas Harian tanggal</label><input id="tanggalRutinitas" type="date">
+<p class="muted" style="margin:-5px 0 10px">Tanggal ini menentukan di hari mana tugas anak muncul pada tab Rutinitas.</p>
+<details style="margin-bottom:10px"><summary>＋ Rencana belajar tambahan</summary>
+<div class="grid2" style="margin-top:8px"><div><label>Sesi 1</label><input id="rencana1" type="date"></div><div><label>Menit</label><input id="rencana1Menit" type="number" min="5" step="5" value="30"></div></div>
+<div class="grid2"><div><label>Sesi 2</label><input id="rencana2" type="date"></div><div><label>Menit</label><input id="rencana2Menit" type="number" min="5" step="5" value="30"></div></div>
+</details>
+<label>Catatan (opsional)</label><textarea id="catatan" rows="2" placeholder="Contoh: kerjakan sebelum bermain"></textarea>
+<button class="primary full" onclick="tambah()">＋ Simpan Tugas & Pengingat</button>
+</div>
+<div class="row"><h2>Daftar Tugas</h2><span class="pill" id="jumlahAktif">0 aktif</span></div>
+<div class="tabs" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px">
+<button id="fAktif" class="active" onclick="setFilter('aktif',this)">Aktif</button>
+<button id="fSelesai" onclick="setFilter('selesai',this)">Selesai</button>
+<button id="fSemua" onclick="setFilter('semua',this)">Semua</button>
+</div>
+<div id="daftar"></div>
+</section>
+
+<section id="arsip" class="sec">
+<div class="row"><h2>Arsip Tugas Selesai</h2><span class="pill" id="jumlahArsip">0 arsip</span></div>
+<div class="notice">Tugas yang selesai disimpan pada tanggal penyelesaiannya. Hari berikutnya tidak tampil di daftar utama; buka tab Arsip untuk melihat kembali riwayat hari sebelumnya.</div>
+<div class="grid2" style="margin-bottom:10px">
+<div><label>Dari tanggal</label><input id="arsipDari" type="date"></div>
+<div><label>Sampai tanggal</label><input id="arsipSampai" type="date"></div>
+</div>
+<div class="grid2" style="margin-bottom:10px">
+<button onclick="bukaArsipKemarin()">← Arsip Kemarin</button>
+<button onclick="resetFilterArsip()">Semua Arsip</button>
+</div>
+<div id="daftarArsip"></div>
+</section>
+
+<section id="minggu" class="sec">
+<h2>Rekap Mingguan untuk Orang Tua</h2>
+<div id="rekap"></div>
+<div class="card">
+<h3>Catatan evaluasi minggu ini</h3>
+<textarea id="evaluasi" rows="3" placeholder="Apa yang perlu diperbaiki minggu depan?"></textarea>
+<button class="primary full" onclick="simpanEvaluasi()">Simpan Evaluasi Mingguan</button>
+</div>
+</section>
+
+<section id="atur" class="sec">
+<div class="card"><h2>Pengaturan Anak</h2>
+<label>Nama anak</label><input id="namaAnak" placeholder="Nama anak">
+<label>Jam belajar default</label><input id="jamDefault" type="time" value="19:00">
+<button class="primary full" onclick="simpanAtur()">Simpan Pengaturan</button></div>
+<div class="card"><h3>Cara pakai yang disarankan</h3>
+<p class="muted">1. Anda masukkan tugas ketika mengetahui tugas sekolah.<br>2. Tentukan waktu yang wajar untuk mengingatkan.<br>3. Gunakan tombol <b>Bagikan Pengingat</b> untuk mengirim teks lewat WhatsApp/SMS atau aplikasi lain.<br>4. Setelah anak melapor, ubah status menjadi Sedang / Selesai.<br>5. Periksa rekap satu kali setiap minggu.</p>
+</div></section>
+</main>
+<dialog id="selesaiDlg">
+  <h2>Selesaikan Tugas</h2>
+  <p class="muted">Tambahkan bukti foto hasil belajar sebelum tugas ditandai selesai.</p>
+  <div id="selesaiInfo" class="notice"></div>
+  <label>Bukti foto hasil belajar *</label>
+  <p class="muted" style="margin:2px 0 8px">Pilih foto hasil belajar yang dikirim anak lewat WhatsApp dan sudah tersimpan di Galeri/Foto atau File HP.</p>
+  <input id="fotoSelesaiInput" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" style="display:none">
+  <button type="button" class="full" onclick="$('fotoSelesaiInput').click()">🖼 Pilih dari Galeri / File</button>
+  <div id="namaFotoTerpilih" class="muted" style="margin-top:7px"></div>
+  <div id="fotoPreviewWrap"></div>
+  <label>Catatan selesai</label>
+  <textarea id="catatanSelesai" rows="3" placeholder="Contoh: latihan halaman 45–47 selesai, masih perlu mengulang soal nomor 8."></textarea>
+  <div class="grid2">
+    <button onclick="selesaiDlg.close()">Batal</button>
+    <button class="primary" onclick="konfirmasiSelesai()">Simpan Selesai</button>
+  </div>
+</dialog>
+
+<script>
+/*__RP_PUSTAKA__*/
+const K='rutinitasPlusAnak_v1';
+let db=JSON.parse(localStorage.getItem(K)||'null')||{tasks:[],settings:{nama:'Anak',jam:'19:00'},eval:{}};let filterTugas='aktif';let tugasSelesaiId=null;let fotoSelesaiData=null;
+const $=id=>document.getElementById(id), esc=s=>String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const iso=d=>{d=new Date(d);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+const hariIni=()=>iso(new Date());
+function save(){localStorage.setItem(K,JSON.stringify(db));render();try{parent.postMessage({type:'rp-tersimpan',ok:true},'*')}catch(e){}}
+function tab(id,b){document.querySelectorAll('.sec').forEach(x=>x.classList.remove('active'));$(id).classList.add('active');document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');if(id==='minggu')renderRekap();if(id==='arsip')renderArsip()}
+function setFilter(mode,b){
+ filterTugas=mode;
+ ['fAktif','fSelesai','fSemua'].forEach(id=>$(id)?.classList.remove('active'));
+ if(b)b.classList.add('active');
+ render();
+}
+function tambah(){
+ if(!$('judul').value.trim()||!$('deadline').value)return pesan('Isi tugas dan deadline.');
+ db.tasks.push({id:Date.now(),subjek:$('subjek').value.trim()||'Sekolah',judul:$('judul').value.trim(),deadline:$('deadline').value,menit:+$('menit').value||30,ingat:$('ingat').value,tanggalRutinitas:$('tanggalRutinitas').value||hariIni(),catatan:$('catatan').value.trim(),status:'Belum',created:new Date().toISOString(),reminderCount:0,response:'Belum merespons',plans:[...($('rencana1').value?[{date:$('rencana1').value,minutes:+$('rencana1Menit').value||30,done:false}]:[]),...($('rencana2').value?[{date:$('rencana2').value,minutes:+$('rencana2Menit').value||30,done:false}]:[])]});
+ $('judul').value='';$('catatan').value='';save()
+}
+function ubah(id,status){
+ let t=db.tasks.find(x=>x.id===id);if(!t)return;
+ if(status==='Selesai'){bukaSelesai(id);return}
+ t.status=status;t.updated=new Date().toISOString();
+ if(t.completedAt)delete t.completedAt;
+ if(t.tanggalRutinitas&&!t.diarsipRutinitas)sinkronRutinitas(t,false);
+ save()
+}
+function bukaSelesai(id){
+ let t=db.tasks.find(x=>x.id===id);if(!t)return;
+ tugasSelesaiId=id;fotoSelesaiData=null;
+ $('selesaiInfo').innerHTML=`<b>${esc(t.subjek)}</b><br>${esc(t.judul)}`;
+ $('catatanSelesai').value=t.catatanSelesai||'';
+ $('fotoSelesaiInput').value='';
+ $('namaFotoTerpilih').textContent=t.buktiFoto?'Bukti foto sudah tersimpan. Pilih lagi jika ingin mengganti.':'';
+ $('fotoPreviewWrap').innerHTML=t.buktiFoto?`<img class="photoPreview" src="${t.buktiFoto}">`:'';
+ selesaiDlg.showModal();
+}
+function resizeFoto(file){
+ return new Promise((resolve,reject)=>{
+   let fr=new FileReader();
+   fr.onload=()=>{let img=new Image();img.onload=()=>{
+     let max=1280,w=img.width,h=img.height;
+     if(w>max||h>max){let r=Math.min(max/w,max/h);w=Math.round(w*r);h=Math.round(h*r)}
+     let c=document.createElement('canvas');c.width=w;c.height=h;
+     c.getContext('2d').drawImage(img,0,0,w,h);
+     resolve(c.toDataURL('image/jpeg',0.78));
+   };img.onerror=reject;img.src=fr.result};fr.onerror=reject;fr.readAsDataURL(file)
+ })
+}
+$('fotoSelesaiInput').addEventListener('change',async e=>{
+ let f=e.target.files&&e.target.files[0];if(!f)return;
+ $('namaFotoTerpilih').textContent='Terpilih: '+f.name;
+ try{
+   fotoSelesaiData=await resizeFoto(f);
+   $('fotoPreviewWrap').innerHTML=`<img class="photoPreview" src="${fotoSelesaiData}">`;
+ }catch(err){
+   fotoSelesaiData=null;
+   pesan('Foto tidak dapat dibaca. Pilih JPG, PNG, WebP, HEIC, atau HEIF dari Galeri/File.');
+ }
+});
+function konfirmasiSelesai(){
+ let t=db.tasks.find(x=>x.id===tugasSelesaiId);if(!t)return;
+ let foto=fotoSelesaiData||t.buktiFoto;
+ if(!foto)return pesan('Bukti foto hasil belajar wajib ditambahkan.');
+ t.status='Selesai';t.completedAt=new Date().toISOString();t.updated=t.completedAt;
+ t.buktiFoto=foto;t.catatanSelesai=$('catatanSelesai').value.trim();
+ // Arsipkan hasil selesai pada hari penyelesaian.
+ t.archiveDate=hariIni();
+ t.diarsipRutinitas=true;
+ if(t.tanggalRutinitas){
+   let d=bacaRutinitas(t.tanggalRutinitas);
+   if(d&&Array.isArray(d.tugas)){
+     d.tugas=d.tugas.filter(x=>String(x.anakId||'')!==String(t.id));
+     while(d.tugas.length<3)d.tugas.push({t:'',s:false,p:'normal',status:'belum',jam:''});
+     tulisRutinitas(t.tanggalRutinitas,d);
+   }
+ }
+ // Simpan snapshot selesai di Rutinitas Harian pada tanggal selesai.
+ let ad=bacaRutinitas(t.archiveDate);
+ if(!Array.isArray(ad.tugas))ad.tugas=[];
+ let snap={t:'[Selesai Anak · '+t.subjek+'] '+t.judul,s:true,p:'normal',status:'selesai',jam:'',anakArsipId:t.id,arsipSelesai:true};
+ let ex=ad.tugas.findIndex(x=>String(x.anakArsipId||'')===String(t.id));
+ if(ex>=0)ad.tugas[ex]=snap; else{
+   let kosong=ad.tugas.findIndex(x=>!String(x.t||'').trim());
+   if(kosong>=0)ad.tugas[kosong]=snap; else ad.tugas.push(snap);
+ }
+ tulisRutinitas(t.archiveDate,ad);
+ selesaiDlg.close();save();
+}
+
+function dataRutinitasKosong(){
+ return {pagi:[false,false,false],tugas:[
+  {t:'',s:false,p:'normal',status:'belum',jam:''},
+  {t:'',s:false,p:'normal',status:'belum',jam:''},
+  {t:'',s:false,p:'normal',status:'belum',jam:''}
+ ],catatan:[],sore:[false,false,false]};
+}
+function bacaRutinitas(tgl){
+ let k='harian:'+tgl;
+ try{
+   let v=parent.localStorage.getItem(k);
+   if(v)return JSON.parse(v);
+ }catch(e){}
+ try{
+   let v=localStorage.getItem(k);
+   if(v)return JSON.parse(v);
+ }catch(e){}
+ return dataRutinitasKosong();
+}
+function tulisRutinitas(tgl,d){
+ let k='harian:'+tgl,txt=JSON.stringify(d),ok=false;
+ try{parent.localStorage.setItem(k,txt);ok=true}catch(e){}
+ if(!ok)try{localStorage.setItem(k,txt);ok=true}catch(e){}
+ return ok;
+}
+function sinkronRutinitas(t,buat=true){
+ let tgl=t.tanggalRutinitas||((t.ingat||'').slice(0,10))||hariIni();
+ if(!tgl)return false;
+ let d=bacaRutinitas(tgl);
+ if(!d.pagi)d=Object.assign(dataRutinitasKosong(),d||{});
+ if(!Array.isArray(d.tugas))d.tugas=[];
+ let i=d.tugas.findIndex(x=>String(x.anakId||'')===String(t.id));
+ let jam=t.ingat&&t.ingat.length>=16?t.ingat.slice(11,16):'';
+ let isi={t:'[Anak · '+t.subjek+'] '+t.judul,s:t.status==='Selesai',p:'penting',
+          status:t.status==='Sedang'?'proses':'belum',jam:jam,anakId:t.id,
+          sumber:'Pendamping Belajar Anak'};
+ if(i>=0)d.tugas[i]=Object.assign(d.tugas[i],isi);
+ else if(buat){
+   let kosong=d.tugas.findIndex(x=>!String(x.t||'').trim());
+   if(kosong>=0)d.tugas[kosong]=Object.assign(d.tugas[kosong]||{},isi);
+   else d.tugas.push(isi);
+ }else return false;
+ return tulisRutinitas(tgl,d);
+}
+async function simpanKeRutinitas(id){
+ let t=db.tasks.find(x=>x.id===id);if(!t)return;
+ let awal=t.tanggalRutinitas||((t.ingat||'').slice(0,10))||hariIni();
+ let tgl=await pilihTanggal('Simpan tugas ini ke Rutinitas Harian pada tanggal:',awal);
+ if(!tgl)return;
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(tgl))return pesan('Tanggal tidak sah.');
+ t.tanggalRutinitas=tgl;
+ t.diarsipRutinitas=false;
+ if(t.archivedAt)delete t.archivedAt;
+ if(sinkronRutinitas(t,true)){
+   save();
+   let nama=new Date(tgl+'T12:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long'});
+   if(await tanya('Tersimpan ke Rutinitas Harian '+nama+'.\n\nBuka tab Rutinitas sekarang?','Buka'))
+     try{parent.pindahTab('routine')}catch(e){}
+ }else pesan('Gagal menyimpan ke Rutinitas Harian.');
+}
+function hapusDariRutinitas(t){
+ if(!t||!t.tanggalRutinitas)return;
+ let d=bacaRutinitas(t.tanggalRutinitas);
+ if(!d||!Array.isArray(d.tugas))return;
+ d.tugas=d.tugas.filter(x=>String(x.anakId||'')!==String(t.id));
+ while(d.tugas.length<3)d.tugas.push({t:'',s:false,p:'normal',status:'belum',jam:''});
+ tulisRutinitas(t.tanggalRutinitas,d);
+}
+
+function tambahHari(tgl,n){
+ let d=new Date(tgl+'T12:00:00');d.setDate(d.getDate()+n);return iso(d);
+}
+function pindahHari(id,arah=1){
+ let t=db.tasks.find(x=>x.id===id);if(!t)return;
+ let asal=t.tanggalRutinitas||hariIni();
+ let tujuan=tambahHari(asal,arah);
+ let lama=bacaRutinitas(asal);
+ if(lama&&Array.isArray(lama.tugas)){
+   let idx=lama.tugas.findIndex(x=>String(x.anakId||'')===String(t.id));
+   if(idx>=0){
+     // keep history in old day as archived snapshot
+     lama.tugas[idx]=Object.assign(lama.tugas[idx],{
+       t:'[Anak · '+t.subjek+'] '+t.judul+' — dipindah ke '+new Date(tujuan+'T12:00:00').toLocaleDateString('id-ID',{day:'numeric',month:'short'}),
+       s:false,status:'belum',arsipAnak:true
+     });
+     tulisRutinitas(asal,lama);
+   }
+ }
+ t.tanggalRutinitas=tujuan;
+ t.diarsipRutinitas=false;
+ if(t.archivedAt)delete t.archivedAt;
+ sinkronRutinitas(t,true);
+ save();
+ pesan('Tugas dipindahkan ke '+new Date(tujuan+'T12:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long'})+'. Hari lama tetap tersimpan sebagai riwayat.');
+}
+function tetapHariIni(id){
+ let t=db.tasks.find(x=>x.id===id);if(!t)return;
+ if(!t.tanggalRutinitas)t.tanggalRutinitas=hariIni();
+ t.diarsipRutinitas=false;
+ if(t.archivedAt)delete t.archivedAt;
+ sinkronRutinitas(t,true);save();
+ pesan('Tugas tetap dicatat pada '+new Date(t.tanggalRutinitas+'T12:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long'})+'.');
+}
+function arsipkanRutinitas(id){
+ let t=db.tasks.find(x=>x.id===id);if(!t||!t.tanggalRutinitas)return;
+ let d=bacaRutinitas(t.tanggalRutinitas);
+ if(d&&Array.isArray(d.tugas)){
+   d.tugas=d.tugas.filter(x=>String(x.anakId||'')!==String(t.id));
+   while(d.tugas.length<3)d.tugas.push({t:'',s:false,p:'normal',status:'belum',jam:''});
+   tulisRutinitas(t.tanggalRutinitas,d);
+ }
+ t.diarsipRutinitas=true;
+ t.archivedAt=new Date().toISOString();
+ save();
+ pesan('Catatan anak disembunyikan dari Rutinitas Harian. Riwayat lengkap tetap tersimpan di tab Anak.');
+}
+async function hapus(id){
+ let t=db.tasks.find(x=>x.id===id);
+ if(!t)return;
+ if(!await tanya('Hapus tugas "'+t.judul+'"?','Hapus'))return;
+ let ikutRutin=false;
+ if(t.tanggalRutinitas)
+   ikutRutin=await tanya('Tugas ini juga tersimpan di Rutinitas Harian.\n\nHapus dari Rutinitas juga?','Hapus juga');
+ let salinan=JSON.parse(JSON.stringify(t));
+ if(ikutRutin)hapusDariRutinitas(t);
+ db.tasks=db.tasks.filter(x=>x.id!==id);save();
+ try{
+   Batal.tawarkan('Tugas dihapus', function(){
+     db.tasks.push(salinan);
+     if(ikutRutin)sinkronRutinitas(salinan,true);
+     save(); pesan('Dikembalikan');
+   });
+ }catch(e){}
+}
+function teks(t){
+ let nama=db.settings.nama||'Nak';
+ let d=new Date(t.deadline+'T12:00:00').toLocaleDateString('id-ID',{we
