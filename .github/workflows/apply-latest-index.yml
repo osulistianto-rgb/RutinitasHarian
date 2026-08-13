@@ -1,0 +1,61 @@
+name: Terapkan index terbaru dan siapkan APK
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".upload/READY"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Terapkan index terbaru
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f .upload/READY ]; then
+            echo "Tidak ada paket upload yang siap."
+            exit 0
+          fi
+          cat .upload/index.html.gz.b64.part* | base64 -d | gzip -d > index.html.new
+          test -s index.html.new
+          grep -q "PUSTAKA_BERSAMA" index.html.new
+          grep -q "PEKERJAAN_DASAR" index.html.new
+          grep -q "SATDIKBATA PUSDIKTOP DITTOPAD" index.html.new
+          mv index.html.new index.html
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/bangun-apk-v511-fix-gradle.yml')
+          s=p.read_text()
+          s=s.replace('Bangun APK Rutinitas Plus v5.12 — Mesin Pekerjaan Terpadu','Bangun APK Rutinitas Plus v5.15 — Mesin Pekerjaan Terpadu')
+          s=s.replace('grep -q "Rutinitas+ v5.12" index.html','grep -q "Rutinitas+" index.html')
+          s=s.replace('echo "index.html v5.12 lolos pemeriksaan."','echo "index.html terbaru lolos pemeriksaan."')
+          s=s.replace('(System.getenv("KODE_VERSI") ?: "512").toInteger()','(System.getenv("KODE_VERSI") ?: "515").toInteger()')
+          s=s.replace('System.getenv("NAMA_VERSI") ?: "5.12"','System.getenv("NAMA_VERSI") ?: "5.15"')
+          s=s.replace('Rutinitas-Plus-v5.12.apk','Rutinitas-Plus-v5.15.apk')
+          s=s.replace('Rutinitas-Plus-v5.12-APK','Rutinitas-Plus-v5.15-APK')
+          p.write_text(s)
+          PY
+
+          rm -rf .upload
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html .github/workflows/bangun-apk-v511-fix-gradle.yml .upload || true
+          if git diff --cached --quiet; then
+            echo "Tidak ada perubahan."
+            exit 0
+          fi
+          git commit -m "Update Rutinitas+ v5.15 dan siapkan build APK"
+          git push
