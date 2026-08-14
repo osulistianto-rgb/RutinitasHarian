@@ -146,6 +146,9 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
               <uses-permission android:name="android.permission.INTERNET"/>
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+              <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+              <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
 
               <application
                   android:allowBackup="true"
@@ -153,7 +156,12 @@ jobs:
                   android:theme="@style/AppTheme"
                   android:usesCleartextTraffic="false">
 
-                  <activity
+                  <receiver
+                      android:name=".AlarmReceiver"
+                      android:enabled="true"
+                      android:exported="false"/>
+
+              <activity
                       android:name=".MainActivity"
                       android:exported="true"
                       android:screenOrientation="portrait">
@@ -198,6 +206,156 @@ jobs:
           </resources>
           EOF
 
+          cat > app/src/main/java/com/rutinitasplus/app/NotificationBridge.java <<'EOF'
+          package com.rutinitasplus.app;
+
+          import android.app.AlarmManager;
+          import android.app.PendingIntent;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.net.Uri;
+          import android.os.Build;
+          import android.provider.Settings;
+          import android.webkit.JavascriptInterface;
+
+          /* Jembatan penjadwal notifikasi native, sepola dengan ShareBridge dan
+             DownloadBridge. ID pengingat di aplikasi web berupa string (mis.
+             'p1a2b3c4' atau 'i1786627096206kvya'), bukan angka kecil -- jadi
+             dipakai String di sini, diubah jadi kode stabil lewat hashCode()
+             untuk PendingIntent dan ID notifikasi. */
+          public class NotificationBridge {
+              private final MainActivity aktivitas;
+
+              public NotificationBridge(MainActivity aktivitas) {
+                  this.aktivitas = aktivitas;
+              }
+
+              private static int kode(String id) {
+                  return (id == null ? "rutinitas" : id).hashCode();
+              }
+
+              private PendingIntent buatPendingIntent(String id) {
+                  Intent intent = new Intent(aktivitas, AlarmReceiver.class);
+                  int kodeNotif = kode(id);
+                  intent.putExtra("kode", kodeNotif);
+                  return PendingIntent.getBroadcast(
+                      aktivitas, kodeNotif, intent,
+                      PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+              }
+
+              @JavascriptInterface
+              public void jadwalkan(String id, String judul, String pesan, double timestampMs) {
+                  if (id == null || id.isEmpty()) return;
+                  AlarmManager am = (AlarmManager) aktivitas.getSystemService(Context.ALARM_SERVICE);
+                  if (am == null) return;
+
+                  Intent intent = new Intent(aktivitas, AlarmReceiver.class);
+                  int kodeNotif = kode(id);
+                  intent.putExtra("kode", kodeNotif);
+                  intent.putExtra("judul", judul);
+                  intent.putExtra("pesan", pesan);
+                  PendingIntent pi = PendingIntent.getBroadcast(
+                      aktivitas, kodeNotif, intent,
+                      PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+                  aktivitas.runOnUiThread(() -> {
+                      try {
+                          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) {
+                              /* Android 12+ mewajibkan izin ini diberikan lewat Pengaturan --
+                                 tidak bisa otomatis dari dalam aplikasi. Jadwalkan tidak-presisi
+                                 sebagai jalan tengah, supaya tetap berbunyi meski agak meleset. */
+                              am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, (long) timestampMs, pi);
+                              return;
+                          }
+                          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                              am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, (long) timestampMs, pi);
+                          } else {
+                              am.setExact(AlarmManager.RTC_WAKEUP, (long) timestampMs, pi);
+                          }
+                      } catch (SecurityException e) {
+                          try { am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, (long) timestampMs, pi); }
+                          catch (Exception e2) { /* diamkan -- lebih baik tanpa alarm daripada aplikasi berhenti */ }
+                      }
+                  });
+              }
+
+              @JavascriptInterface
+              public void batalkan(String id) {
+                  if (id == null || id.isEmpty()) return;
+                  AlarmManager am = (AlarmManager) aktivitas.getSystemService(Context.ALARM_SERVICE);
+                  if (am == null) return;
+                  PendingIntent pi = buatPendingIntent(id);
+                  aktivitas.runOnUiThread(() -> am.cancel(pi));
+              }
+
+              /* true bila alarm presisi diizinkan sistem (selalu true di bawah Android 12) */
+              @JavascriptInterface
+              public boolean bisaPresisi() {
+                  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true;
+                  AlarmManager am = (AlarmManager) aktivitas.getSystemService(Context.ALARM_SERVICE);
+                  return am != null && am.canScheduleExactAlarms();
+              }
+
+              /* Membuka layar Pengaturan tempat pengguna mengizinkan alarm presisi.
+                 Hanya berarti pada Android 12 ke atas. */
+              @JavascriptInterface
+              public void bukaPengaturanAlarm() {
+                  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
+                  aktivitas.runOnUiThread(() -> {
+                      try {
+                          Intent intent = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
+                          intent.setData(Uri.parse("package:" + aktivitas.getPackageName()));
+                          aktivitas.startActivity(intent);
+                      } catch (Exception e) { /* diamkan */ }
+                  });
+              }
+          }
+          EOF
+
+          cat > app/src/main/java/com/rutinitasplus/app/AlarmReceiver.java <<'EOF'
+          package com.rutinitasplus.app;
+
+          import android.app.NotificationManager;
+          import android.app.PendingIntent;
+          import android.content.BroadcastReceiver;
+          import android.content.Context;
+          import android.content.Intent;
+          import androidx.core.app.NotificationCompat;
+
+          /* Menangkap alarm dari AlarmManager -- termasuk saat HP dalam mode
+             tidur -- dan menampilkan notifikasi. Dipicu lewat NotificationBridge,
+             dijadwalkan dari JavaScript. */
+          public class AlarmReceiver extends BroadcastReceiver {
+              @Override
+              public void onReceive(Context context, Intent intent) {
+                  int kodeNotif = intent.getIntExtra("kode", 0);
+                  String judul = intent.getStringExtra("judul");
+                  String pesan = intent.getStringExtra("pesan");
+
+                  NotificationManager nm =
+                      (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+                  if (nm == null) return;
+
+                  Intent bukaApp = new Intent(context, MainActivity.class);
+                  bukaApp.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                  PendingIntent pi = PendingIntent.getActivity(
+                      context, kodeNotif, bukaApp,
+                      PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+                  NotificationCompat.Builder b = new NotificationCompat.Builder(context, "rutinitas_channel")
+                      .setSmallIcon(android.R.drawable.ic_popup_reminder)
+                      .setContentTitle(judul != null && !judul.isEmpty() ? judul : "Rutinitas+")
+                      .setContentText(pesan != null && !pesan.isEmpty() ? pesan : "Saatnya menjalankan rutinitas.")
+                      .setPriority(NotificationCompat.PRIORITY_HIGH)
+                      .setCategory(NotificationCompat.CATEGORY_REMINDER)
+                      .setAutoCancel(true)
+                      .setContentIntent(pi);
+
+                  nm.notify(kodeNotif, b.build());
+              }
+          }
+          EOF
+
           cat > app/src/main/java/com/rutinitasplus/app/MainActivity.java <<'EOF'
           package com.rutinitasplus.app;
 
@@ -230,6 +388,13 @@ jobs:
           import java.util.ArrayList;
           import java.util.Date;
           import java.util.List;
+          import android.Manifest;
+          import android.app.AlarmManager;
+          import android.app.NotificationChannel;
+          import android.app.NotificationManager;
+          import android.content.pm.PackageManager;
+          import androidx.core.app.ActivityCompat;
+          import androidx.core.content.ContextCompat;
           import java.util.Locale;
 
           public class MainActivity extends Activity {
@@ -267,6 +432,9 @@ jobs:
 
                   webView.addJavascriptInterface(new DownloadBridge(), "AndroidDownload");
                   webView.addJavascriptInterface(new ShareBridge(), "AndroidShare");
+                  webView.addJavascriptInterface(new NotificationBridge(this), "AndroidNotif");
+                  siapkanKanalNotifikasi();
+                  mintaIzinNotifikasi();
 
                   final WebViewAssetLoader assetLoader =
                       new WebViewAssetLoader.Builder()
@@ -711,6 +879,36 @@ jobs:
                       cameraOutputUri = null;
                       return null;
                   }
+              }
+
+              private static final int IZIN_NOTIF_REQUEST = 2001;
+
+              private void siapkanKanalNotifikasi() {
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                      NotificationChannel kanal = new NotificationChannel(
+                          "rutinitas_channel", "Pengingat Rutinitas",
+                          NotificationManager.IMPORTANCE_HIGH);
+                      kanal.setDescription("Pengingat rutinitas, tenggat, dan pendampingan anak");
+                      NotificationManager nm = getSystemService(NotificationManager.class);
+                      if (nm != null) nm.createNotificationChannel(kanal);
+                  }
+              }
+
+              private void mintaIzinNotifikasi() {
+                  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
+                  if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                          != PackageManager.PERMISSION_GRANTED) {
+                      ActivityCompat.requestPermissions(
+                          this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, IZIN_NOTIF_REQUEST);
+                  }
+              }
+
+              @Override
+              public void onRequestPermissionsResult(
+                      int requestCode, String[] permissions, int[] grantResults) {
+                  super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+                  /* Ditolak atau diizinkan, aplikasi tetap jalan seperti biasa --
+                     notifikasi sekadar tidak akan muncul kalau ditolak. */
               }
 
               @Override
