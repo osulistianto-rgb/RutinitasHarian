@@ -1,0 +1,50 @@
+name: Perbaiki build APK sekali
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/perbaiki-build-sekali.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  perbaiki:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ambil kode
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tambahkan import Build yang hilang
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/bangun-apk-v511-fix-gradle.yml')
+          s=p.read_text(encoding='utf-8')
+          marker="cat > app/src/main/java/com/rutinitasplus/app/MainActivity.java <<'EOF'"
+          if marker not in s:
+              raise SystemExit('Marker MainActivity tidak ditemukan')
+          a,b=s.split(marker,1)
+          needle='          import android.os.Bundle;\n'
+          add='          import android.os.Bundle;\n          import android.os.Build;\n'
+          if '          import android.os.Build;\n' not in b:
+              if needle not in b:
+                  raise SystemExit('Import Bundle pada MainActivity tidak ditemukan')
+              b=b.replace(needle,add,1)
+          p.write_text(a+marker+b,encoding='utf-8')
+          PY
+
+          grep -A12 "cat > app/src/main/java/com/rutinitasplus/app/MainActivity.java" .github/workflows/bangun-apk-v511-fix-gradle.yml | grep -q "import android.os.Build;"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/bangun-apk-v511-fix-gradle.yml
+          git rm .github/workflows/perbaiki-build-sekali.yml
+          git commit -m "Perbaiki import android.os.Build pada pembangun APK"
+          git push
