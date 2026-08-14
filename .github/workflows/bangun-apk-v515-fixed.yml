@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/bangun-apk-v515-fixed.yml"
       - "tools/perbaiki-notifikasi-v5151.py"
+      - "tools/patch-notif-java-v5151.py"
 
 permissions:
   contents: read
@@ -78,7 +79,7 @@ jobs:
           Path('/tmp/buat-proyek.sh').write_text(script,encoding='utf-8')
           PY
           bash /tmp/buat-proyek.sh
-          python3 tools/perbaiki-notifikasi-v5151.py java
+          python3 tools/patch-notif-java-v5151.py
           grep -q '^import android.os.Build;' app/src/main/java/com/rutinitasplus/app/MainActivity.java
           grep -q 'statusNotifikasi' app/src/main/java/com/rutinitasplus/app/NotificationBridge.java
           grep -q 'ujiSekarang' app/src/main/java/com/rutinitasplus/app/NotificationBridge.java
