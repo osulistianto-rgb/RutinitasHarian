@@ -70,16 +70,23 @@ jobs:
           lines=[]
           for line in raw.splitlines():
               lines.append(line[10:] if line.startswith('          ') else line)
-          script='\n'.join(lines)+'\n'
-          needle='import android.os.Bundle;\n'
-          if needle not in script:
-              raise SystemExit('Import Bundle MainActivity tidak ditemukan')
-          if 'import android.os.Build;\n' not in script:
-              script=script.replace(needle, needle+'import android.os.Build;\n', 1)
-          Path('/tmp/buat-proyek.sh').write_text(script,encoding='utf-8')
+          Path('/tmp/buat-proyek.sh').write_text('\n'.join(lines)+'\n',encoding='utf-8')
           PY
           bash /tmp/buat-proyek.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('app/src/main/java/com/rutinitasplus/app/MainActivity.java')
+          s=p.read_text(encoding='utf-8')
+          if 'import android.os.Build;' not in s:
+              needle='import android.os.Bundle;'
+              if needle not in s:
+                  raise SystemExit('Import Bundle pada MainActivity tidak ditemukan')
+              s=s.replace(needle, needle+'\nimport android.os.Build;', 1)
+              p.write_text(s,encoding='utf-8')
+          print('Import Build MainActivity:', 'OK' if 'import android.os.Build;' in p.read_text(encoding='utf-8') else 'GAGAL')
+          PY
           python3 tools/patch-notif-java-v5151.py
+          grep -q 'import android.os.Build;' app/src/main/java/com/rutinitasplus/app/MainActivity.java
           echo "Bridge notifikasi native selesai dipatch"
 
       - name: Siapkan kunci penanda tangan
