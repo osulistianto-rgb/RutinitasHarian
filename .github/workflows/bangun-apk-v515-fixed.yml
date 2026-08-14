@@ -2,6 +2,10 @@ name: Bangun APK Rutinitas Plus v5.15 Fixed
 
 on:
   workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/bangun-apk-v515-fixed.yml"
 
 permissions:
   contents: read
@@ -60,7 +64,6 @@ jobs:
           needle='import android.os.Bundle;\n'
           if needle not in script:
               raise SystemExit('Import Bundle MainActivity tidak ditemukan')
-          # NotificationBridge sudah punya Build; MainActivity belum. Tambahkan pada kemunculan Bundle.
           script=script.replace(needle, needle+'import android.os.Build;\n', 1)
           Path('/tmp/buat-proyek.sh').write_text(script,encoding='utf-8')
           PY
