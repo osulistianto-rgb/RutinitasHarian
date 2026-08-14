@@ -1,0 +1,108 @@
+name: Terapkan index.html dari staging
+
+# Cukup unggah index.html (nama apa pun boleh, termasuk yang sudah
+# diubah otomatis oleh HP jadi index-12.html dsb.) ke dalam map
+# staging/ di GitHub. Alur kerja ini menerapkannya ke akar repositori.
+#
+# Tidak menyentuh .github/workflows/ sama sekali -- termasuk berkas
+# pembangun APK. Jadi tidak akan pernah lagi memundurkan atau merusak
+# nomor versi di sana, berapa pun kali dijalankan, untuk versi berapa pun.
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "staging/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: terapkan-index
+  cancel-in-progress: false
+
+jobs:
+  terapkan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ambil kode
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Terapkan berkas dari staging/
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ ! -d staging ]; then
+            echo "Map staging/ tidak ada. Tidak ada yang diterapkan."
+            exit 0
+          fi
+
+          mapfile -t BERKAS < <(find staging -maxdepth 1 -type f -iname "*.html")
+
+          if [ "${#BERKAS[@]}" -eq 0 ]; then
+            echo "Tidak ada berkas .html di staging/. Tidak ada yang diterapkan."
+            exit 0
+          fi
+
+          if [ "${#BERKAS[@]}" -gt 1 ]; then
+            echo "::error::Ada lebih dari satu berkas .html di staging/:"
+            printf '  - %s\n' "${BERKAS[@]}"
+            echo "Hapus yang tidak terpakai dulu, sisakan satu, lalu unggah ulang."
+            exit 1
+          fi
+
+          SUMBER="${BERKAS[0]}"
+          echo "Berkas ditemukan: $SUMBER"
+
+          # Pemeriksaan ARSITEKTUR -- bukan nomor versi tertentu, supaya
+          # tetap berlaku untuk v5.15, v5.16, dan seterusnya tanpa diedit.
+          test -s "$SUMBER"
+          grep -q "Rutinitas+"     "$SUMBER"
+          grep -q "PUSTAKA_BERSAMA" "$SUMBER"
+          grep -q "PEKERJAAN_DASAR" "$SUMBER"
+          grep -q "pasangPustaka"   "$SUMBER"
+
+          UKURAN=$(stat -c%s "$SUMBER")
+          echo "Ukuran: $((UKURAN/1024)) KB"
+          if [ "$UKURAN" -lt 204800 ]; then
+            echo "::error::Hanya $((UKURAN/1024)) KB -- terlalu kecil, kemungkinan modul tidak lengkap atau berkas salah."
+            exit 1
+          fi
+          if [ "$UKURAN" -gt 5242880 ]; then
+            echo "::error::$((UKURAN/1024)) KB -- terlalu besar, periksa apakah ada berkas lain tertanam tanpa sengaja."
+            exit 1
+          fi
+
+          VERSI=$(grep -oE "Rutinitas\+ v[0-9]+\.[0-9]+(\.[0-9]+)?" "$SUMBER" | head -n1)
+          echo "Versi terdeteksi: ${VERSI:-tidak diketahui}"
+
+          mv "$SUMBER" index.html
+          rm -rf staging
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git add -A staging 2>/dev/null || true
+
+          if git diff --cached --quiet; then
+            echo "Isinya sama dengan index.html yang sekarang. Tidak ada yang perlu dikomit."
+            exit 0
+          fi
+
+          git commit -m "Terapkan index.html (${VERSI:-versi tidak diketahui})"
+          git push
+
+      - name: Ringkasan
+        if: success()
+        run: |
+          echo "### index.html diterapkan" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Alur kerja **Terbitkan ke Pages** akan berjalan otomatis setelah ini." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Berkas pembangun APK **tidak ikut tersentuh** oleh alur kerja ini." >> $GITHUB_STEP_SUMMARY
+          echo "Untuk membangun APK versi ini, buka **Actions → Bangun APK → Run workflow**" >> $GITHUB_STEP_SUMMARY
+          echo "dan isi NAMA_VERSI / KODE_VERSI secara manual di sana." >> $GITHUB_STEP_SUMMARY
