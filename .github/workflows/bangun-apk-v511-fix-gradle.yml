@@ -1,4 +1,4 @@
-name: Bangun APK Rutinitas Plus v5.11 — Mesin Pekerjaan Terpadu
+name: Bangun APK Rutinitas Plus v5.15 — Mesin Pekerjaan Terpadu
 
 on:
   workflow_dispatch:
@@ -110,8 +110,8 @@ jobs:
                   applicationId = "com.rutinitasplus.app"
                   minSdk = 23
                   targetSdk = 35
-                  versionCode = (System.getenv("KODE_VERSI") ?: "511").toInteger()
-                  versionName = System.getenv("NAMA_VERSI") ?: "5.11"
+                  versionCode = (System.getenv("KODE_VERSI") ?: "515").toInteger()
+                  versionName = System.getenv("NAMA_VERSI") ?: "5.15"
               }
 
               signingConfigs {
@@ -837,15 +837,15 @@ jobs:
           ASAL=$(find app/build/outputs/apk -name '*.apk' ! -name '*unsigned*' | head -n 1)
           if [ -z "$ASAL" ]; then ASAL=$(find app/build/outputs/apk -name '*.apk' | head -n 1); fi
           test -n "$ASAL" || { echo "::error::APK tidak ditemukan"; exit 1; }
-          cp "$ASAL" hasil-apk/Rutinitas-Plus-v5.11.apk
+          cp "$ASAL" hasil-apk/Rutinitas-Plus-v5.15.apk
           echo "Sumber : $ASAL"
-          echo "Ukuran : $(( $(stat -c%s hasil-apk/Rutinitas-Plus-v5.11.apk) / 1024 )) KB"
+          echo "Ukuran : $(( $(stat -c%s hasil-apk/Rutinitas-Plus-v5.15.apk) / 1024 )) KB"
           echo "Ditandatangani tetap : ${{ steps.kunci.outputs.ada }}"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Rutinitas-Plus-v5.11-APK
-          path: hasil-apk/Rutinitas-Plus-v5.11.apk
+          name: Rutinitas-Plus-v5.15-APK
+          path: hasil-apk/Rutinitas-Plus-v5.15.apk
           if-no-files-found: error
           retention-days: 30
